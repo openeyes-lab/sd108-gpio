@@ -1,0 +1,25 @@
+/*
+ * Device tree overlay for sd108-gpio on i2c1
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+
+	compatible = "brcm,bcm2835", "brcm,bcm2836", "brcm,bcm2708", "brcm,bcm2709";
+
+	/* the i2c config of the sd108-gpio itself binding everything together */
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			sd108@36 {
+				compatible = "i2c,sd108";
+				reg = <0x36>;
+        status = "okay";
+			};
+		};
+	};
+
+};
