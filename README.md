@@ -32,7 +32,7 @@ sudo apt-get install raspberrypi-kernel-headers git
 ```
 Download from git:
 ```
-git clone http://server.local/git/LinuxDriver/sd108_hdmi.git
+git clone https://github.com/openeyes-lab/sd108-gpio.git
 ```
 Compile and install
 ```
