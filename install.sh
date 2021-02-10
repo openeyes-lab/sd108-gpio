@@ -33,7 +33,7 @@ else
 fi
 
 # build overlay dtbo
-if dtc -@ -b 0 -I dts -O dtb -o dts/sd108-gpio.dtbo sd108-gpio.dts ; then
+if dtc -@ -b 0 -I dts -O dtb -o sd108-gpio.dtbo dts/sd108-gpio.dts ; then
 	sudo chown root:root sd108-gpio.dtbo
 	sudo mv sd108-gpio.dtbo /boot/overlays
 else
