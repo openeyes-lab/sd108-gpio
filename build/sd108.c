@@ -72,7 +72,6 @@
 #define SD108_CHIP_ACTIVE_FLAG          0x0001
 #define SD108_CHIP_SLEEP_FLAG           0x0002
 
-
 struct sd108 {
 	struct device                      *dev;
 	struct pwm_chip                    chip;
@@ -394,8 +393,9 @@ static int sd108_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			   const struct pwm_state *state)
 {
 	struct sd108 *data = pwm_to_sd108(chip);
-	unsigned int period;
-	unsigned int duty;
+	u64 period;
+	u64 duty;
+	unsigned int regmap_val;
 	unsigned int reg;
 	int          ret = -EINVAL;
 
@@ -410,8 +410,10 @@ static int sd108_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 					goto close;
 				if (state->period<500000)
 					goto close;
-				period=state->period/100000;
-				ret = regmap_write(data->regmap, SD108_CHIP_LED_PERIOD, period);
+				period=state->period;
+				do_div(period,100000);
+				regmap_val = (unsigned int)(period);
+				ret = regmap_write(data->regmap, SD108_CHIP_LED_PERIOD, regmap_val);
 				if (ret < 0) {
 					dev_err(data->dev, "PWM apply fail i2c write on period\n");
 					goto close;
@@ -421,10 +423,12 @@ static int sd108_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 
 			if (state->duty_cycle!=data->state[pwm->hwpwm].duty_cycle) {
 				// duty is changed
-				duty = state->duty_cycle*100/state->period;
-				duty |= 0x8000;
+				duty = state->duty_cycle*100;
+				do_div(duty,state->period);
+				regmap_val = (unsigned int)(duty);
+				regmap_val |= 0x8000;
 				reg = SD108_CHIP_LED_RIGHT+pwm->hwpwm;
-				ret = regmap_write(data->regmap, reg, duty);
+				ret = regmap_write(data->regmap, reg, regmap_val);
 				if (ret < 0) {
 					dev_err(data->dev, "PWM apply fail i2c write on duty\n");
 					goto close;
@@ -437,8 +441,9 @@ static int sd108_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 		{
 			if (data->state[pwm->hwpwm].enabled) {
 				// force disable
-				duty = state->duty_cycle*100/state->period;
-				duty |= 0x8000;
+				//duty = state->duty_cycle*100/state->period;
+				//duty |= 0x8000;
+
 				reg = SD108_CHIP_LED_RIGHT+pwm->hwpwm;
 				ret = regmap_write(data->regmap, reg, 0);
 				if (ret < 0) {
@@ -492,7 +497,7 @@ static int sd108_pwm_probe(struct i2c_client *client,
 	unsigned int val;
 	size_t size;
 
-	/* Driver maemory allocation */
+	/* Driver memory allocation */
 	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
@@ -508,7 +513,7 @@ static int sd108_pwm_probe(struct i2c_client *client,
 	mutex_init(&data->lock);
 
 	/* Fill and register LCD driver memory segment */
-	data->lcd.enable_gpio = -EINVAL;
+	//data->lcd.enable_gpio = -EINVAL;
 	data->lcd.max_brightness = 10;
 	size = sizeof(*data->lcd.levels) * data->lcd.max_brightness;
 	data->lcd.levels = devm_kzalloc(&client->dev, size, GFP_KERNEL);
