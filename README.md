@@ -80,7 +80,9 @@ hdmi_drive=1
 config_hdmi_boost=0
 display_hdmi_rotate=2
 ```
-and uncomment
+note that the instruction display_hdmi_rotate can be used to rotatate the screen but is ininfluent if DRM VC4 V3D driver is enabled
+
+finally uncomment
 ```
 hdmi_force_hotplug=1
 ```
