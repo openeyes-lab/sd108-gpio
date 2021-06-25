@@ -18,6 +18,9 @@ fi
 # Uncomment hdmi_force_hotplug=1
 sudo sed -i '/hdmi_force_hotplug=1/s/^#//g' /boot/config.txt
 
+# Uncomment i2c_arm
+sudo sed -i '/dtparam=i2c_arm=on/s/^#//g' /boot/config.txt
+
 if grep -q hdmi_ignore_edid=0xa5000080 /boot/config.txt ; then
 	echo "hdmi present"
 else
