@@ -1,18 +1,40 @@
-#!/usr/bin/sh
+#!/usr/bin/bash
 
-echo "Running script $0 with params $1"
-
-if [ -z "$1" ]; then
+function upgrade_system {
+	if [ "$upgrade" = false ]; then
+		return
+	fi
 	sudo apt update
 	sudo apt upgrade -y
-	echo "Checking headers installation"
-	dpkg-query -s raspberrypi-kernel-headers
-	if [ $? -eq 1 ]
-	then
-		sudo apt install -y raspberrypi-kernel-headers
-		echo "After reboot relaunch install"
-		sudo reboot
-	fi
+	upgrade=false
+}
+
+
+if [ "$1" == "noupgrade" ]; then
+	echo "Running script $0 without upgrade"
+	upgrade=false
+else
+	echo "Running script $0 with upgrade"
+	upgrade=true
+fi
+
+echo "Checking headers installation"
+dpkg-query -s raspberrypi-kernel-headers
+if [ $? -eq 1 ]
+then
+	upgrade_system
+	sudo apt install -y raspberrypi-kernel-headers
+	#echo "After reboot relaunch install"
+	#sudo reboot
+fi
+
+echo "Checking dkms installation"
+dpkg-query -s dkms
+if [ $? -eq 1 ]
+then
+	sudo apt install -y dkms
+	#echo "After reboot relaunch install"
+	#sudo reboot
 fi
 
 # Uncomment hdmi_force_hotplug=1
@@ -52,27 +74,24 @@ fi
 
 sudo cp sd108.rules /etc/udev/rules.d
 
-cd build
+# Install dkms
+uname_r=$(uname -r)
+src="build"
+mod="sd108"
+ver="1.0"
 
-make
-if [ $? -ne 0 ]; then
-    echo "Failed to make"
-    echo -1
+if [[ -e /usr/src/$mod-$ver || -e /var/lib/dkms/$mod/$ver ]]; then
+  echo "Warning previous install exist...removing!"
+  sudo dkms remove --force -m $mod -v $ver --all
+  sudo rm -rf /usr/src/$mod-$ver
 fi
 
-make install
-if [ $? -ne 0 ]; then
-    echo "Failed to install"
-    echo -1
-fi
+sudo mkdir -p /usr/src/$mod-$ver
+sudo cp -a $src/* /usr/src/$mod-$ver/
 
-rm *.o
-rm *.mod
-rm modules.order
-rm Module.symvers
-rm *.mod.c
-rm *.ko
-rm .*.cmd
+sudo dkms add -m $mod -v $ver
+sudo dkms build $uname_r -m $mod -v $ver && dkms install --force $uname_r -m $mod -v $ver
 
 echo "sd108 correctly installed: reboot to make effective"
-echo "remember to use sudo raspi-config to enable i2c interface"
+
+
