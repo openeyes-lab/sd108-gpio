@@ -90,7 +90,8 @@ sudo mkdir -p /usr/src/$mod-$ver
 sudo cp -a $src/* /usr/src/$mod-$ver/
 
 sudo dkms add -m $mod -v $ver
-sudo dkms build $uname_r -m $mod -v $ver && dkms install --force $uname_r -m $mod -v $ver
+sudo dkms build $uname_r -m $mod -v $ver 
+sudo dkms install --force $uname_r -m $mod -v $ver
 
 echo "sd108 correctly installed: reboot to make effective"
 

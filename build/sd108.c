@@ -1,5 +1,5 @@
 /*
- * sd108.c - Part of OPEN-EYES-II products, Linux kernel modules for GPIO 
+ * sd108.c - Part of OPEN-EYES-II products, Linux kernel modules for GPIO
  * expansion.
  * This driver handles the SD108 FW running on ATTINY817.
  * Author:
@@ -13,7 +13,7 @@
  * This file is part of sd108-gpio distribution
  * https://github.com/openeyes-lab/sd108-gpio
  *
- * Copyright (c) 2021 OPEN-EYES Srl 
+ * Copyright (c) 2021 OPEN-EYES Srl
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,7 @@
 
 #define SD108_NUM_REGS                  16
 #define SD108_NPWM_LED                  2
-#define SD108_MAXGPIO                   1
+#define SD108_MAXGPIO                   2
 
 /* define the base of filesys: /sys/class/pwm/pwmchip12 */
 #define SD108_PWM_BASE                  12
@@ -80,7 +80,6 @@
 struct sd108 {
 	struct device                      *dev;
 	struct pwm_chip                    chip;
-	struct backlight_device            *bl;
 	struct regmap                      *regmap;
 	struct platform_pwm_backlight_data lcd;
 	struct gpio_chip                   gpio;
@@ -98,11 +97,6 @@ static inline struct sd108 *pwm_to_sd108(struct pwm_chip *chip)
 	return container_of(chip, struct sd108, chip);
 }
 
-static inline struct sd108 *backlight_to_sd108(struct backlight_device *bl)
-{
-	return container_of(bl, struct sd108, bl);
-}
-
 /**
  * GPIO CALLBACK
  */
@@ -110,91 +104,106 @@ static inline struct sd108 *backlight_to_sd108(struct backlight_device *bl)
 static int sd108_gpio_get_value(struct gpio_chip *chip, unsigned off)
 {
 	struct sd108 *data = gpiochip_get_data(chip);
-	int val;
-	int bit = 1<<off;
+	int val=0;
 	int ret;
 
-	//mutex_lock(&data->lock);
+	if (off<SD108_MAXGPIO) {
+		mutex_lock(&data->lock);
 
-	/* Get GPIO value */
-	ret = regmap_read(data->regmap, SD108_CHIP_GPIO_VALUE, &val);
-	if (ret < 0) {
-		dev_err(data->dev, "sd108_gpio_get_value failed to read I2C\n");
-		return ret;
+		/* Get GPIO value */
+		ret = regmap_read(data->regmap, SD108_CHIP_GPIO_VALUE+off, &val);
+		if (ret < 0) {
+			mutex_unlock(&data->lock);
+			dev_err(data->dev, "sd108_gpio_get_value failed to read I2C\n");
+			return ret;
+		}
+
+		data->gpio_val = val;
+
+		mutex_unlock(&data->lock);
+
+		return val;
 	}
 
-	data->gpio_val = val;
-
-	//mutex_unlock(&dev->lock);
-
-	return !!(val & bit);
+	return -ENODEV;
 }
 
 static void sd108_gpio_set_value(struct gpio_chip *chip, unsigned off, int val)
 {
 	struct sd108 *data = gpiochip_get_data(chip);
-	int value = data->gpio_val;
-	int bit = 1<<off;
 	int ret;
 
-	//mutex_lock(&dev->lock);
+  if (off<SD108_MAXGPIO) {
+		if (val == data->gpio_val) // nothing to do
+			return;
 
-	if (val)
-		value |= bit;
-	else
-		value &= ~bit;
+		mutex_lock(&data->lock);
 
-	/* Set GPIO value */
-	ret = regmap_write(data->regmap, SD108_CHIP_GPIO_VALUE, value);
-	if (ret < 0) {
-		dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
-		return;
+		/* Set GPIO value */
+		ret = regmap_write(data->regmap, SD108_CHIP_GPIO_VALUE+off, val);
+		if (ret < 0) {
+			mutex_unlock(&data->lock);
+			dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
+			return;
+		}
+
+		data->gpio_val = val;
+		mutex_unlock(&data->lock);
 	}
-
-	data->gpio_val = value;
-
-	//mutex_unlock(&dev->lock);
 }
 
 static int sd108_gpio_direction_input(struct gpio_chip *chip, unsigned off)
 {
 	struct sd108 *data = gpiochip_get_data(chip);
-	int direction = data->gpio_dir & ~(1<<off);
+	int direction;
 	int ret;
 
-	//mutex_lock(&dev->lock);
-	/* Set GPIO as input  */
-	ret = regmap_write(data->regmap, SD108_CHIP_GPIO_DIRECTION, direction);
-	if (ret < 0) {
-		dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
-		return ret;
-	}
-	data->gpio_dir = direction;
-	//mutex_unlock(&dev->lock);
+	if (off<SD108_MAXGPIO) {
+		mutex_lock(&data->lock);
 
-	return 0;
+		/* Set GPIO as input  */
+		direction = data->gpio_dir & ~(0xff<<(8*off));
+
+		ret = regmap_write(data->regmap, SD108_CHIP_GPIO_DIRECTION, direction);
+		if (ret < 0) {
+			mutex_unlock(&data->lock);
+			dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
+			return ret;
+		}
+		data->gpio_dir = direction;
+		mutex_unlock(&data->lock);
+		return 0;
+	}
+
+	return -ENODEV;
 }
 
 static int sd108_gpio_direction_output(struct gpio_chip *chip,
 					 unsigned off, int val)
 {
 	struct sd108 *data = gpiochip_get_data(chip);
-	int direction = data->gpio_dir | (1<<off);
+	int direction;
 	int ret;
 
-	sd108_gpio_set_value(chip,off,val);
+	if (off<SD108_MAXGPIO) {
+		sd108_gpio_set_value(chip,off,val);
 
-	//mutex_lock(&dev->lock);
-	/* Set GPIO as output  */
-	ret = regmap_write(data->regmap, SD108_CHIP_GPIO_DIRECTION, direction);
-	if (ret < 0) {
-		dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
-		return ret;
+		mutex_lock(&data->lock);
+		direction = data->gpio_dir & ~(0xff<<(8*off));
+		direction = direction | (1<<(8*off));
+		/* Set GPIO as output  */
+		ret = regmap_write(data->regmap, SD108_CHIP_GPIO_DIRECTION, direction);
+		if (ret < 0) {
+			mutex_unlock(&data->lock);
+			dev_err(data->dev, "sd108_gpio_set_value failed to read I2C\n");
+			return ret;
+		}
+		data->gpio_dir = direction;
+		mutex_unlock(&data->lock);
+		return 0;
 	}
-	data->gpio_dir = direction;
-	//mutex_unlock(&dev->lock);
 
-	return 0;
+	return -ENODEV;
 }
 
 /** **************************************************************************
@@ -607,7 +616,7 @@ static int sd108_pwm_probe(struct i2c_client *client,
 
 	sd108_set_sleep_mode(data, false);
 
-	data->bl = bl;
+	//data->bld = bl;
 
 	dev_set_drvdata(&bl->dev, data);
 
